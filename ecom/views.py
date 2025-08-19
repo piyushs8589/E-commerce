@@ -6,6 +6,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth.decorators import login_required,user_passes_test
 from django.contrib import messages
 from django.conf import settings
+from django.contrib.auth import logout
 
 def home_view(request):
     products=models.Product.objects.all()
@@ -20,6 +21,10 @@ def home_view(request):
     return render(request,'ecom/index.html',{'products':products,'product_count_in_cart':product_count_in_cart})
     
 
+# Custom logout view
+def logout_view(request):
+    logout(request)
+    return redirect('/')
 
 #for showing login button for admin(by sumit)
 def adminclick_view(request):
@@ -36,8 +41,9 @@ def customer_signup_view(request):
         userForm=forms.CustomerUserForm(request.POST)
         customerForm=forms.CustomerForm(request.POST,request.FILES)
         if userForm.is_valid() and customerForm.is_valid():
-            user=userForm.save()
-            user.set_password(user.password)
+            user=userForm.save(commit=False)
+            password = userForm.cleaned_data['password']
+            user.set_password(password)
             user.save()
             customer=customerForm.save(commit=False)
             customer.user=user
@@ -116,8 +122,9 @@ def update_customer_view(request,pk):
         userForm=forms.CustomerUserForm(request.POST,instance=user)
         customerForm=forms.CustomerForm(request.POST,instance=customer)
         if userForm.is_valid() and customerForm.is_valid():
-            user=userForm.save()
-            user.set_password(user.password)
+            user=userForm.save(commit=False)
+            password = userForm.cleaned_data['password']
+            user.set_password(password)
             user.save()
             customerForm.save()
             return redirect('view-customer')
@@ -399,39 +406,65 @@ def payment_success_view(request):
     # we will fetch product id from cookies then respective details from db
     # then we will create order objects and store in db
     # after that we will delete cookies because after order placed...cart should be empty
-    customer=models.Customer.objects.get(user_id=request.user.id)
-    products=None
-    email=None
-    mobile=None
-    address=None
-    if 'product_ids' in request.COOKIES:
-        product_ids = request.COOKIES['product_ids']
-        if product_ids != "":
-            product_id_in_cart=product_ids.split('|')
-            products=models.Product.objects.all().filter(id__in = product_id_in_cart)
-            # Here we get products list that will be ordered by one customer at a time
-
-    # these things can be change so accessing at the time of order...
-    if 'email' in request.COOKIES:
-        email=request.COOKIES['email']
-    if 'mobile' in request.COOKIES:
-        mobile=request.COOKIES['mobile']
-    if 'address' in request.COOKIES:
-        address=request.COOKIES['address']
-
-    # here we are placing number of orders as much there is a products
-    # suppose if we have 5 items in cart and we place order....so 5 rows will be created in orders table
-    # there will be lot of redundant data in orders table...but its become more complicated if we normalize it
-    for product in products:
-        models.Orders.objects.get_or_create(customer=customer,product=product,status='Pending',email=email,mobile=mobile,address=address)
-
-    # after order placed cookies should be deleted
-    response = render(request,'ecom/payment_success.html')
-    response.delete_cookie('product_ids')
-    response.delete_cookie('email')
-    response.delete_cookie('mobile')
-    response.delete_cookie('address')
-    return response
+    try:
+        customer = models.Customer.objects.get(user_id=request.user.id)
+        products = None
+        email = None
+        mobile = None
+        address = None
+        
+        # Check if product_ids cookie exists
+        if 'product_ids' in request.COOKIES:
+            product_ids = request.COOKIES['product_ids']
+            if product_ids != "":
+                product_id_in_cart = product_ids.split('|')
+                products = models.Product.objects.all().filter(id__in=product_id_in_cart)
+                # Here we get products list that will be ordered by one customer at a time
+        else:
+            # No products in cart, redirect to cart page with message
+            messages.error(request, "No products in your cart. Please add products before checkout.")
+            return redirect('cart')
+        
+        # Check if products were found
+        if not products or len(products) == 0:
+            messages.error(request, "No valid products found in your cart.")
+            return redirect('cart')
+        
+        # Get shipping information from cookies
+        email = request.COOKIES.get('email')
+        mobile = request.COOKIES.get('mobile')
+        address = request.COOKIES.get('address')
+        
+        # Validate that we have all required information
+        if not all([email, mobile, address]):
+            messages.error(request, "Shipping information is incomplete. Please fill out the address form.")
+            return redirect('customer-address')
+        
+        # Create orders for each product
+        for product in products:
+            models.Orders.objects.get_or_create(
+                customer=customer,
+                product=product,
+                status='Pending',
+                email=email,
+                mobile=mobile,
+                address=address
+            )
+        
+        # After order placed, cookies should be deleted
+        response = render(request, 'ecom/payment_success.html')
+        response.delete_cookie('product_ids')
+        response.delete_cookie('email')
+        response.delete_cookie('mobile')
+        response.delete_cookie('address')
+        return response
+        
+    except models.Customer.DoesNotExist:
+        messages.error(request, "Customer profile not found. Please complete your profile.")
+        return redirect('my-profile')
+    except Exception as e:
+        messages.error(request, f"An error occurred during checkout: {str(e)}")
+        return redirect('cart')
 
 
 
@@ -476,35 +509,72 @@ from django.http import HttpResponse
 
 
 def render_to_pdf(template_src, context_dict):
-    template = get_template(template_src)
-    html  = template.render(context_dict)
-    result = io.BytesIO()
-    pdf = pisa.pisaDocument(io.BytesIO(html.encode("ISO-8859-1")), result)
-    if not pdf.err:
-        return HttpResponse(result.getvalue(), content_type='application/pdf')
-    return
+    try:
+        # Get the template
+        template = get_template(template_src)
+        # Render the template with context
+        html = template.render(context_dict)
+        # Create a file-like buffer to receive PDF data
+        result = io.BytesIO()
+        # Convert HTML to PDF
+        pdf = pisa.pisaDocument(io.BytesIO(html.encode("ISO-8859-1")), result)
+        # Check if PDF generation was successful
+        if not pdf.err:
+            # Return the PDF as a response
+            return HttpResponse(result.getvalue(), content_type='application/pdf')
+        else:
+            # Log the error
+            print(f"PDF generation error: {pdf.err}")
+            return None
+    except Exception as e:
+        # Log any exceptions that occur
+        print(f"Error in render_to_pdf: {str(e)}")
+        return None
 
 @login_required(login_url='customerlogin')
 @user_passes_test(is_customer)
 def download_invoice_view(request,orderID,productID):
-    order=models.Orders.objects.get(id=orderID)
-    product=models.Product.objects.get(id=productID)
-    mydict={
-        'orderDate':order.order_date,
-        'customerName':request.user,
-        'customerEmail':order.email,
-        'customerMobile':order.mobile,
-        'shipmentAddress':order.address,
-        'orderStatus':order.status,
-
-        'productName':product.name,
-        'productImage':product.product_image,
-        'productPrice':product.price,
-        'productDescription':product.description,
-
-
-    }
-    return render_to_pdf('ecom/download_invoice.html',mydict)
+    try:
+        # Try to get the order and product objects
+        order = models.Orders.objects.get(id=orderID)
+        product = models.Product.objects.get(id=productID)
+        
+        # Verify that the order belongs to the current user
+        if order.customer != request.user.customer:
+            messages.error(request, "You don't have permission to view this invoice.")
+            return redirect('my-order')
+        
+        # Prepare the context dictionary for the PDF template
+        mydict = {
+            'orderDate': order.order_date,
+            'customerName': request.user,
+            'customerEmail': order.email,
+            'customerMobile': order.mobile,
+            'shipmentAddress': order.address,
+            'orderStatus': order.status,
+            'productName': product.name,
+            'productImage': product.product_image,
+            'productPrice': product.price,
+            'productDescription': product.description,
+        }
+        
+        # Generate and return the PDF
+        pdf = render_to_pdf('ecom/download_invoice.html', mydict)
+        if pdf:
+            return pdf
+        else:
+            messages.error(request, "Error generating PDF. Please try again later.")
+            return redirect('my-order')
+            
+    except models.Orders.DoesNotExist:
+        messages.error(request, "Order not found.")
+        return redirect('my-order')
+    except models.Product.DoesNotExist:
+        messages.error(request, "Product not found.")
+        return redirect('my-order')
+    except Exception as e:
+        messages.error(request, f"An error occurred: {str(e)}")
+        return redirect('my-order')
 
 
 
@@ -530,8 +600,9 @@ def edit_profile_view(request):
         userForm=forms.CustomerUserForm(request.POST,instance=user)
         customerForm=forms.CustomerForm(request.POST,instance=customer)
         if userForm.is_valid() and customerForm.is_valid():
-            user=userForm.save()
-            user.set_password(user.password)
+            user=userForm.save(commit=False)
+            password = userForm.cleaned_data['password']
+            user.set_password(password)
             user.save()
             customerForm.save()
             return HttpResponseRedirect('my-profile')

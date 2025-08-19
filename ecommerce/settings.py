@@ -22,12 +22,15 @@ STATIC_DIR=os.path.join(BASE_DIR,'static')
 # See https://docs.djangoproject.com/en/3.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = '#vw(03o=(9kbvg!&2d5i!2$_58x@_-3l4wujpow6(ym37jxnza'
+# Use environment variable for SECRET_KEY in production
+SECRET_KEY = os.environ.get('SECRET_KEY', '#vw(03o=(9kbvg!&2d5i!2$_58x@_-3l4wujpow6(ym37jxnza')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Set DEBUG based on environment variable, default to True for development
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = []
+# Set allowed hosts from environment variable, default to localhost for development
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 
 # Application definition
@@ -132,17 +135,23 @@ MEDIA_ROOT=os.path.join(BASE_DIR,'static')
 
 
 LOGIN_REDIRECT_URL='/afterlogin'
+LOGOUT_REDIRECT_URL='/'
+LOGIN_URL='/adminlogin'
 
 #for contact us give your gmail id and password
 EMAIL_BACKEND ='django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_USE_TLS = True
 EMAIL_PORT = 587
-EMAIL_HOST_USER = 'from@gmail.com' # this email will be used to send emails
-EMAIL_HOST_PASSWORD = 'xyz' # host email password required
-# now sign in with your host gmail account in your browser
-# open following link and turn it ON
-# https://myaccount.google.com/lesssecureapps
-# otherwise you will get SMTPAuthenticationError at /contactus
-# this process is required because google blocks apps authentication by default
-EMAIL_RECEIVING_USER = ['to@gmail.com'] # email on which you will receive messages sent from website
+
+# Get email settings from environment variables or use defaults for development
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '') # this email will be used to send emails
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '') # host email password required
+
+# For Gmail users:
+# You may need to use an App Password instead of your regular password
+# Visit https://myaccount.google.com/apppasswords to set up an App Password
+# Or enable 2-step verification and then create an app password
+
+# Email receiving settings
+EMAIL_RECEIVING_USER = [os.environ.get('EMAIL_RECEIVING_USER', 'to@gmail.com')] # email on which you will receive messages

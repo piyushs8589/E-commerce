@@ -24,8 +24,15 @@ class ProductForm(forms.ModelForm):
 #address of shipment
 class AddressForm(forms.Form):
     Email = forms.EmailField()
-    Mobile= forms.IntegerField()
+    Mobile = forms.CharField(max_length=20)
     Address = forms.CharField(max_length=500)
+    
+    def clean_Mobile(self):
+        mobile = self.cleaned_data.get('Mobile')
+        # Basic validation to ensure mobile contains only digits
+        if mobile and not mobile.isdigit():
+            raise forms.ValidationError("Mobile number should contain only digits")
+        return mobile
 
 class FeedbackForm(forms.ModelForm):
     class Meta:

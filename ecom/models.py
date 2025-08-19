@@ -32,18 +32,18 @@ class Orders(models.Model):
         ('Out for Delivery','Out for Delivery'),
         ('Delivered','Delivered'),
     )
-    customer=models.ForeignKey('Customer', on_delete=models.CASCADE,null=True)
-    product=models.ForeignKey('Product',on_delete=models.CASCADE,null=True)
-    email = models.CharField(max_length=50,null=True)
-    address = models.CharField(max_length=500,null=True)
-    mobile = models.CharField(max_length=20,null=True)
-    order_date= models.DateField(auto_now_add=True,null=True)
-    status=models.CharField(max_length=50,null=True,choices=STATUS)
+    customer=models.ForeignKey('Customer', on_delete=models.CASCADE,null=True,blank=True)
+    product=models.ForeignKey('Product',on_delete=models.CASCADE,null=True,blank=True)
+    email = models.CharField(max_length=50,null=True,blank=True)
+    address = models.CharField(max_length=500,null=True,blank=True)
+    mobile = models.CharField(max_length=20,null=True,blank=True)
+    order_date= models.DateField(auto_now_add=True,null=True,blank=True)
+    status=models.CharField(max_length=50,null=True,blank=True,choices=STATUS)
 
 
 class Feedback(models.Model):
     name=models.CharField(max_length=40)
     feedback=models.CharField(max_length=500)
-    date= models.DateField(auto_now_add=True,null=True)
+    date= models.DateField(auto_now_add=True,null=True,blank=True)
     def __str__(self):
         return self.name
